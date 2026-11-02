@@ -1,18 +1,12 @@
-import os
 import random
 import string
-import asyncio
-from flask import Flask, request
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
-app = Flask(__name__)
-
-# Ở đây chúng ta GÁN CỨNG Token vào code luôn vì Render không cho dùng Environment nữa
-# HÃY THAY Token của bạn vào dòng dưới đây
 TOKEN = "8855431557:AAGgkiZNCx8wLYPUVhGP1CMbu6vTGCK-cpo"
 
-# Khởi tạo Application
 ptb_app = Application.builder().token(TOKEN).build()
 
 def generate_password(length=12):
@@ -26,32 +20,35 @@ def generate_password(length=12):
     return first_char + "".join(tail_chars)
 
 async def reply_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.message.text:
+        return
     account_name = update.message.text
     new_password = generate_password()
     reply_message = f"Tài khoản: {account_name}\nMật khẩu: <code>{new_password}</code>"
     await update.message.reply_text(reply_message, parse_mode='HTML')
 
-# Đăng ký handler
 ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply_password))
 
-@app.route('/')
-def home():
-    return "Bot Webhook đang hoạt động tốt trên Render!"
+# Hàm này giúp quản lý việc bật/tắt bot an toàn cùng với server
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await ptb_app.initialize()
+    await ptb_app.start()
+    yield
+    await ptb_app.stop()
+    await ptb_app.shutdown()
 
-@app.route(f'/{TOKEN}', methods=['POST'])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), ptb_app.bot)
-    
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    if not ptb_app._initialized:
-        loop.run_until_complete(ptb_app.initialize())
-        
-    loop.run_until_complete(ptb_app.process_update(update))
-    loop.close()
-    
-    return 'ok'
+app = FastAPI(lifespan=lifespan)
 
-if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=10000)
+# Đường dẫn này dành cho UptimeRobot gõ cửa kiểm tra
+@app.get("/")
+async def home():
+    return "Bot đang thức và hoạt động mượt mà!"
+
+# Đường dẫn này dành riêng cho Telegram gửi tin nhắn tới
+@app.post(f"/{TOKEN}")
+async def webhook_telegram(req: Request):
+    data = await req.json()
+    update = Update.de_json(data, ptb_app.bot)
+    await ptb_app.process_update(update)
+    return {"status": "ok"}
