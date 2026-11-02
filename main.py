@@ -3,7 +3,7 @@ import string
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 TOKEN = "8855431557:AAGgkiZNCx8wLYPUVhGP1CMbu6vTGCK-cpo"
 
@@ -19,17 +19,21 @@ def generate_password(length=12):
     random.shuffle(tail_chars)
     return first_char + "".join(tail_chars)
 
-async def reply_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.message or not update.message.text:
+async def tao_mk_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Nếu người dùng chỉ gõ /mk mà không ghi tên tài khoản
+    if not context.args:
+        await update.message.reply_text("⚠️ Vui lòng gõ thêm tên tài khoản.\nVí dụ: <code>/mk Facebook</code>", parse_mode='HTML')
         return
-    account_name = update.message.text
+        
+    account_name = " ".join(context.args)
     new_password = generate_password()
     reply_message = f"Tài khoản: {account_name}\nMật khẩu: <code>{new_password}</code>"
+    
     await update.message.reply_text(reply_message, parse_mode='HTML')
 
-ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply_password))
+# Đổi thành đăng ký lệnh /mk thay vì bắt mọi tin nhắn
+ptb_app.add_handler(CommandHandler("mk", tao_mk_command))
 
-# Hàm này giúp quản lý việc bật/tắt bot an toàn cùng với server
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await ptb_app.initialize()
@@ -40,12 +44,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# Đường dẫn này dành cho UptimeRobot gõ cửa kiểm tra
 @app.get("/")
 async def home():
-    return "Bot đang thức và hoạt động mượt mà!"
+    return "Bot đang thức!"
 
-# Đường dẫn này dành riêng cho Telegram gửi tin nhắn tới
 @app.post(f"/{TOKEN}")
 async def webhook_telegram(req: Request):
     data = await req.json()
