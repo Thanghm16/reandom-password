@@ -8,11 +8,11 @@ from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
 app = Flask(__name__)
 
-TOKEN = os.environ.get("TELEGRAM_TOKEN")
-if not TOKEN:
-    raise ValueError("Thiếu TELEGRAM_TOKEN trong Environment Variables")
+# Ở đây chúng ta GÁN CỨNG Token vào code luôn vì Render không cho dùng Environment nữa
+# HÃY THAY Token của bạn vào dòng dưới đây
+TOKEN = "8855431557:AAGgkiZNCx8wLYPUVhGP1CMbu6vTGCK-cpo"
 
-# Khởi tạo Application của Telegram
+# Khởi tạo Application
 ptb_app = Application.builder().token(TOKEN).build()
 
 def generate_password(length=12):
@@ -36,14 +36,12 @@ ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply_passwo
 
 @app.route('/')
 def home():
-    return "Bot Webhook đang hoạt động tốt!"
+    return "Bot Webhook đang hoạt động tốt trên Render!"
 
 @app.route(f'/{TOKEN}', methods=['POST'])
 def webhook():
-    """Hàm này nhận dữ liệu từ Telegram đẩy về"""
     update = Update.de_json(request.get_json(force=True), ptb_app.bot)
     
-    # Dùng asyncio để chạy process_update trong Flask đồng bộ
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
