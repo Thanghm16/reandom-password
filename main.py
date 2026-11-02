@@ -1,19 +1,19 @@
 import os
 import random
 import string
-import threading
-from flask import Flask
+import asyncio
+from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
 app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return "Bot đang sống!"
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
+if not TOKEN:
+    raise ValueError("Thiếu TELEGRAM_TOKEN trong Environment Variables")
 
-def run_web():
-    app.run(host="0.0.0.0", port=10000)
+# Khởi tạo Application của Telegram
+ptb_app = Application.builder().token(TOKEN).build()
 
 def generate_password(length=12):
     first_char = random.choice(string.ascii_uppercase)
@@ -31,21 +31,29 @@ async def reply_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     reply_message = f"Tài khoản: {account_name}\nMật khẩu: <code>{new_password}</code>"
     await update.message.reply_text(reply_message, parse_mode='HTML')
 
-def main():
-    # Lấy token từ Environment Variables
-    TOKEN = os.environ.get("TELEGRAM_TOKEN")
+# Đăng ký handler
+ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply_password))
+
+@app.route('/')
+def home():
+    return "Bot Webhook đang hoạt động tốt!"
+
+@app.route(f'/{TOKEN}', methods=['POST'])
+def webhook():
+    """Hàm này nhận dữ liệu từ Telegram đẩy về"""
+    update = Update.de_json(request.get_json(force=True), ptb_app.bot)
     
-    # Báo lỗi nếu quên chưa thêm biến môi trường
-    if not TOKEN:
-        raise ValueError("Chưa tìm thấy biến môi trường TELEGRAM_TOKEN. Vui lòng thêm vào Render!")
+    # Dùng asyncio để chạy process_update trong Flask đồng bộ
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    if not ptb_app._initialized:
+        loop.run_until_complete(ptb_app.initialize())
         
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply_password))
+    loop.run_until_complete(ptb_app.process_update(update))
+    loop.close()
     
-    print("Khởi động bot...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    return 'ok'
 
 if __name__ == '__main__':
-    web_thread = threading.Thread(target=run_web)
-    web_thread.start()
-    main()
+    app.run(host="0.0.0.0", port=10000)
